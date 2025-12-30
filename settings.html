@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Settings</title>
+        <style>
+            body { background: #1a1a1a; color: #eee; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; margin: 0; }
+            h2 { border-bottom: 1px solid #333; padding-bottom: 15px; margin-top: 0; font-weight: 300; }
+            .item { margin-bottom: 30px; }
+            .label { color: #888; font-size: 0.85em; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+            .path-box { background: #000; padding: 12px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85em; color: #4af; word-break: break-all; border: 1px solid #333; }
+            .info-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+            .size-tag { color: #aaa; font-size: 0.8em; background: #333; padding: 2px 8px; border-radius: 4px; }
+            .btn-area { margin-top: 40px; text-align: right; border-top: 1px solid #333; padding-top: 20px; }
+            button { background: #444; color: white; border: none; padding: 10px 30px; border-radius: 4px; cursor: pointer; transition: background 0.2s; }
+            button:hover { background: #555; }
+            .hint { color: #666; font-size: 0.75em; margin-top: 10px; line-height: 1.4; }
+        </style>
+    </head>
+    <body>
+        <h2>Settings</h2>
+        
+        <div class="item">
+            <div class="label">Cache Storage</div>
+            <div id="cache-path" class="path-box">Loading...</div>
+            <div class="info-row">
+                <span class="hint">サムネイルとプレビュー動画が保存されています。</span>
+                <span id="cache-size" class="size-tag">Size: -- MB</span>
+            </div>
+        </div>
+
+        <div class="item">
+            <div class="label">Database Location</div>
+            <div id="db-path" class="path-box">Loading...</div>
+            <div class="hint">タグ情報やメタデータが保存されているSQLiteデータベースです。</div>
+        </div>
+
+        <div class="btn-area">
+            <button onclick="window.close()">Close</button>
+        </div>
+
+        <script>
+            async function init() {
+                try {
+                    const settings = await window.api.getSettings();
+                    document.getElementById('cache-path').textContent = settings.cachePath;
+                    document.getElementById('db-path').textContent = settings.dbPath;
+                    document.getElementById('cache-size').textContent = `Total: ${settings.cacheSize}`;
+                } catch (e) {
+                    console.error("Failed to load settings:", e);
+                }
+            }
+            init();
+        </script>
+    </body>
+</html>

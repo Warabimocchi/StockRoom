@@ -1,0 +1,46 @@
+{
+  "name": "stockroom",
+  "productName": "StockRoom",
+  "version": "0.5.1",
+  "author": "Warabi Mocchi",
+  "description": "Video and Image asset manager",
+  "main": "main.cjs",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist": "electron-builder",
+    "license:check": "license-checker --summary",
+    "license:list": "license-checker --csv --out licenses.csv"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.13.3",
+    "license-checker": "^25.0.1"
+  },
+  "build": {
+    "appId": "com.stockroom.app",
+    "productName": "StockRoom",
+    "files": [
+      "**/*",
+      "!dist/*",
+      "!licenses.csv"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.icns"
+    }
+  }
+}

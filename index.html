@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>StockRoom</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- エラー表示エリア -->
+    <div id="error-notification" class="error-notification hidden">
+        <span id="error-message"></span>
+        <button onclick="hideError()">&times;</button>
+    </div>
+
+    <div id="drop-overlay"><h1>📁 Drop Files or Folders</h1></div>
+
+    <header>
+        <div class="app-title">
+            <h1>StockRoom</h1>
+            <span class="version">v0.5.1</span>
+        </div>
+        <div class="header-actions">
+            <button class="btn-secondary" onclick="showShortcuts()">⌨️ Shortcuts</button>
+            <button class="btn-secondary" onclick="window.api.openSettings()">⚙️ Settings</button>
+        </div>
+    </header>
+
+    <div class="app-container">
+               <aside class="sidebar">
+            <!-- ========== 修正：一番上に移動 & アイコン削除 ========== -->
+            <div class="sidebar-section">
+                <button id="untagged-toggle" class="untagged-btn" onclick="toggleUntaggedFilter()">
+                    Show Untagged Only
+                </button>
+            </div>
+
+            <div class="sidebar-section">
+                <input type="text" id="tag-maker" 
+                       placeholder="Add Tag & Press Enter..." 
+                       onkeydown="addNewTag(event)">
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="group-label">System Tags</div>
+                <div id="sys-format" class="tag-list"></div>
+            </div>
+            
+            <div class="sidebar-section">    
+                <div class="group-label">Resolution</div>    
+                <div id="sys-res" class="tag-list"></div>
+            </div>
+            
+            <div class="sidebar-section">    
+                <div class="group-label">User Tags</div>    
+                <div id="user-tags" class="tag-list"></div>
+            </div>
+
+            <div class="filter-zones">
+                <div class="group-label">Filters (Drag Tags)</div>
+                <div class="zone" id="zone-and" data-label="AND"></div>
+                <div class="zone" id="zone-or" data-label="OR"></div>
+                <div class="zone" id="zone-not" data-label="NOT"></div>
+                <button onclick="clearFilters()" class="clear-btn">🗑️ Clear Filters</button>
+            </div>
+
+            <!-- プリセット機能
+            <div class="sidebar-section">
+                <div class="group-label">Filter Presets</div>
+                <button class="btn-secondary" style="width: 100%; margin-bottom: 8px;" onclick="showSavePresetDialog()">
+                    Save Current Filter
+                </button>
+                <div id="presets-list" class="presets-list">
+                    
+                </div>
+            </div>
+            -->
+            <!-- Export機能 -->
+            <div class="sidebar-section">
+                <div class="group-label">Export</div>
+                <div class="export-info">
+                    Filtered: <span id="filtered-count">0</span> files
+                </div>
+                <button class="btn-primary" style="width: 100%;" onclick="exportFilteredFiles()">
+                    Export Filtered Files
+                </button>
+            </div>
+        </aside>
+
+
+        <main>
+            <div id="grid" class="grid view-medium" tabindex="0"></div>
+        </main>
+
+        <aside id="info-panel" class="info-panel">
+            <div class="panel-header">
+                <span id="panel-name">Detail</span>
+                <button class="close-btn" onclick="togglePanel()">×</button>
+            </div>
+            <div class="panel-inner">
+                <div id="panel-video" class="panel-video-box"></div>
+                <div id="panel-tags" class="tag-badges"></div>
+                <div id="panel-specs" class="specs-box"></div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ショートカット表示 -->
+    <div id="shortcuts-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>⌨️ Keyboard Shortcuts</h3>
+            <div class="shortcuts-list">
+                <div class="shortcut"><kbd>←→</kbd> Navigate videos</div>
+                <div class="shortcut"><kbd>Esc</kbd> Close panel</div>
+                <div class="shortcut"><kbd>Space</kbd> Toggle preview</div>
+                <div class="shortcut"><kbd>Del</kbd> Remove tag</div>
+            </div>
+            <button onclick="hideShortcuts()">Close</button>
+        </div>
+    </div>
+
+    <!-- ========== 追加: プリセット保存モーダル ========== -->
+    <div id="preset-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>💾 Save Filter Preset</h3>
+            <input type="text" id="preset-name-input" placeholder="Preset name..." style="width: 100%; padding: 8px; margin: 16px 0; border: 1px solid #444; background: #2a2a2a; color: white; border-radius: 4px;">
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn-secondary" onclick="hidePresetDialog()">Cancel</button>
+                <button class="btn-primary" onclick="saveCurrentPreset()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="progress" class="progress-popup hidden">
+        <div class="progress-header">
+            <span>Processing Videos...</span>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+        <div class="progress-info">
+            <span id="progress-status">0/0</span>
+            <span id="progress-file">Ready</span>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
