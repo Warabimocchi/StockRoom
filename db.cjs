@@ -1,5 +1,5 @@
 // db.cjs - データベース操作モジュール
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 
 let db;
 
@@ -8,37 +8,35 @@ let db;
  * @param {string} dbPath - データベースファイルのパス
  */
 function initialize(dbPath) {
-    db = new sqlite3.Database(dbPath);
-    db.serialize(() => {
-        db.run("PRAGMA journal_mode = WAL;");
-        db.run(`CREATE TABLE IF NOT EXISTS videos (
-            path TEXT PRIMARY KEY,
-            name TEXT,
-            thumbnail TEXT,
-            preview TEXT,
-            codec TEXT,
-            width INTEGER,
-            height INTEGER,
-            fps TEXT,
-            tags TEXT
-        )`);
-    });
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.exec(`CREATE TABLE IF NOT EXISTS videos (
+        path TEXT PRIMARY KEY,
+        name TEXT,
+        thumbnail TEXT,
+        preview TEXT,
+        codec TEXT,
+        width INTEGER,
+        height INTEGER,
+        fps TEXT,
+        tags TEXT
+    )`);
 }
 
 /** SQL実行（INSERT/UPDATE/DELETE用） */
-const run = (sql, params = []) => new Promise((resolve, reject) => {
-    db.run(sql, params, (err) => err ? reject(err) : resolve());
-});
+const run = (sql, params = []) => {
+    return db.prepare(sql).run(...params);
+};
 
 /** 単一行取得 */
-const get = (sql, params = []) => new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
-});
+const get = (sql, params = []) => {
+    return db.prepare(sql).get(...params);
+};
 
 /** 複数行取得 */
-const all = (sql, params = []) => new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
-});
+const all = (sql, params = []) => {
+    return db.prepare(sql).all(...params);
+};
 
 /** データベースを閉じる */
 function close() {
