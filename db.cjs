@@ -1,5 +1,14 @@
 // db.cjs - データベース操作モジュール
-const Database = require('better-sqlite3');
+// ネイティブモジュールはasar外に展開されるため、パスを補正
+const path = require('path');
+let betterSqlitePath;
+try {
+    betterSqlitePath = require.resolve('better-sqlite3');
+} catch {
+    // asar環境ではapp.asar内のパスが解決できないため、app.asar.unpackedを参照
+    betterSqlitePath = path.join(__dirname.replace('app.asar', 'app.asar.unpacked'), 'node_modules', 'better-sqlite3');
+}
+const Database = require(betterSqlitePath);
 
 let db;
 

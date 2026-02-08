@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "postinstall": "electron-builder install-app-deps",
     "dist": "electron-builder",
     "license:check": "license-checker --summary",
     "license:list": "license-checker --csv --out licenses.csv"
