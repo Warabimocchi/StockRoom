@@ -41,6 +41,9 @@
     "mac": {
       "target": "dmg",
       "icon": "icon.icns"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ]
   }
 }

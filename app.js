@@ -1,6 +1,6 @@
 /**
- * HAP & DXV Manager - Frontend Logic (Part 1/2)
- * Core, Initialization, Rendering, Sidebar
+ * StockRoom - フロントエンドロジック
+ * 動画アセット管理のUI制御
  */
 
 // =========================================
@@ -13,14 +13,22 @@ class VideoManager {
         this.activeVideo = null;
         this.currentPreviewPath = null;
         this.showUntaggedOnly = false;
+        this._sidebarTimeout = null;
     }
 
-    // フィルター判定ロジック
+    // --- 解像度カテゴリ判定 ---
+    getResolutionCategory(height) {
+        if (height >= 2160) return "4k";
+        if (height >= 1080) return "1080p";
+        if (height >= 720) return "720p";
+        return "sd";
+    }
+
+    // --- フィルター判定 ---
     matchFilters(video) {
         // Untaggedフィルター
         if (this.showUntaggedOnly) {
-            const hasUserTags = video.tags && video.tags.trim().length > 0;
-            if (hasUserTags) return false;
+            if (video.tags && video.tags.trim().length > 0) return false;
         }
 
         const resolution = this.getResolutionCategory(video.height);
@@ -30,61 +38,96 @@ class VideoManager {
             resolution
         ];
 
-        // AND 検索
         if (this.filters.and.length > 0) {
-            if (!this.filters.and.every(filter => searchTerms.includes(filter))) return false;
+            if (!this.filters.and.every(f => searchTerms.includes(f))) return false;
         }
-
-        // OR 検索
         if (this.filters.or.length > 0) {
-            if (!this.filters.or.some(filter => searchTerms.includes(filter))) return false;
+            if (!this.filters.or.some(f => searchTerms.includes(f))) return false;
         }
-
-        // NOT 検索
         if (this.filters.not.length > 0) {
-            if (this.filters.not.some(filter => searchTerms.includes(filter))) return false;
+            if (this.filters.not.some(f => searchTerms.includes(f))) return false;
         }
 
         return true;
     }
 
-    getResolutionCategory(height) {
-        if (height >= 2160) return "4k";
-        if (height >= 1080) return "1080p";
-        if (height >= 720) return "720p";
-        return "sd";
-    }
-
-    // 現在のフィルター条件に一致する動画リストを取得
+    /** フィルター条件に一致する動画リストを取得 */
     getFilteredVideos() {
         return this.videos.filter(video => this.matchFilters(video));
+    }
+
+    // --- フィルター操作 ---
+    addFilter(type, tag) {
+        if (!this.filters[type].includes(tag)) {
+            this.filters[type].push(tag);
+        }
+    }
+
+    removeFilter(type, tag) {
+        this.filters[type] = this.filters[type].filter(t => t !== tag);
+    }
+
+    clearFilters() {
+        this.filters = { and: [], or: [], not: [] };
+    }
+
+    toggleUntaggedFilter() {
+        this.showUntaggedOnly = !this.showUntaggedOnly;
+    }
+
+    // --- タグ操作 ---
+    async addTagToVideo(video, tag) {
+        let tagArray = video.tags ? video.tags.split(',').map(t => t.trim()) : [];
+        if (tagArray.includes(tag)) {
+            showNotification(`⚠️ タグ "${tag}" は既に存在します`, 'warning');
+            return false;
+        }
+        tagArray.push(tag);
+        const newTagsStr = tagArray.join(',');
+
+        await window.api.updateTags({ path: video.path, tags: newTagsStr });
+        video.tags = newTagsStr;
+        return true;
+    }
+
+    async removeTagFromVideo(video, tag) {
+        let tagArray = video.tags.split(',').map(t => t.trim()).filter(t => t !== tag);
+        const newTagsStr = tagArray.join(',');
+
+        await window.api.updateTags({ path: video.path, tags: newTagsStr });
+        video.tags = newTagsStr;
+    }
+
+    // --- プレビュー管理 ---
+    async cleanupPreview() {
+        if (this.currentPreviewPath) {
+            await window.api.deletePreview(this.currentPreviewPath);
+            this.currentPreviewPath = null;
+        }
+    }
+
+    /** サイドバー更新をデバウンス付きでスケジュール */
+    scheduleSidebarUpdate() {
+        if (this._sidebarTimeout) clearTimeout(this._sidebarTimeout);
+        this._sidebarTimeout = setTimeout(() => updateSidebar(), 300);
     }
 }
 
 // グローバルインスタンス
 const videoManager = new VideoManager();
-let sidebarTimeout = null;
 
 // =========================================
 // 2. 初期化処理
 // =========================================
 window.onload = async () => {
     try {
-        // 動画データの読み込み
         videoManager.videos = await window.api.getVideos();
-        
-        // 初期描画
         render(true);
-        
-        // イベントリスナー設定
-        if (typeof setupDragDropHandlers === 'function') {
-            setupDragDropHandlers();
-        }
-        
+        setupDragDropHandlers();
         document.getElementById('grid').focus();
-        showNotification('✅ Application loaded successfully', 'success');
+        showNotification('✅ アプリケーションを読み込みました', 'success');
     } catch (error) {
-        showError('Failed to load application: ' + error.message);
+        showError('アプリケーションの読み込みに失敗: ' + error.message);
     }
 };
 
@@ -95,16 +138,15 @@ function render(forceRebuild = false) {
     try {
         const grid = document.getElementById('grid');
         const filteredVideos = videoManager.getFilteredVideos();
-        
-        // グリッドの再構築
+
         grid.innerHTML = '';
-        
+
         filteredVideos.forEach((video) => {
             const originalIndex = videoManager.videos.indexOf(video);
             const card = createVideoCard(video, originalIndex);
             grid.appendChild(card);
         });
-        
+
         // アクティブカードのハイライト復元
         if (videoManager.activeVideo) {
             const activeCard = Array.from(grid.children).find(card => {
@@ -113,15 +155,11 @@ function render(forceRebuild = false) {
             });
             if (activeCard) activeCard.classList.add('active');
         }
-        
-        // 関連情報の更新
-        updateFilteredCount(filteredVideos.length);
-        
-        if (sidebarTimeout) clearTimeout(sidebarTimeout);
-        sidebarTimeout = setTimeout(updateSidebar, 300);
 
+        updateFilteredCount(filteredVideos.length);
+        videoManager.scheduleSidebarUpdate();
     } catch (error) {
-        showError('Rendering error: ' + error.message);
+        showError('描画エラー: ' + error.message);
     }
 }
 
@@ -130,10 +168,10 @@ function createVideoCard(video, index) {
     card.className = 'card';
     card.dataset.index = index;
     card.onclick = () => showDetail(video);
-    
+
     const imageSrc = video.thumbnail ? `file://${video.thumbnail}` : '';
     const videoSrc = video.path ? `file://${video.path}` : '';
-    
+
     card.innerHTML = `
         <div class="media">
             <img src="${imageSrc}" alt="${video.name}" loading="lazy" />
@@ -160,7 +198,7 @@ function updateSidebar() {
     const formats = new Set();
     const resolutions = new Set();
     const userTags = new Set();
-    
+
     for (const video of videoManager.videos) {
         if (video.codec) formats.add(video.codec.toLowerCase());
         resolutions.add(videoManager.getResolutionCategory(video.height));
@@ -180,36 +218,34 @@ function updateSidebar() {
 function drawTagList(elementId, tagSet, isSystem) {
     const container = document.getElementById(elementId);
     const tags = Array.from(tagSet).sort();
-    
+
     if (container.dataset.tags === tags.join(',')) return;
-    
+
     container.dataset.tags = tags.join(',');
     container.innerHTML = '';
-    
+
     tags.forEach(tag => {
         const btn = document.createElement('div');
         btn.className = 'tag-item' + (isSystem ? ' sys' : '');
         btn.textContent = tag;
         btn.draggable = true;
-        
+
         btn.onclick = () => {
-            if (!videoManager.filters.and.includes(tag)) {
-                videoManager.filters.and.push(tag);
-                updateFilterUI();
-            }
+            videoManager.addFilter('and', tag);
+            updateFilterUI();
         };
-        
+
         btn.ondragstart = (e) => e.dataTransfer.setData('text', tag);
         container.appendChild(btn);
     });
 }
 
 function toggleUntaggedFilter() {
-    videoManager.showUntaggedOnly = !videoManager.showUntaggedOnly;
+    videoManager.toggleUntaggedFilter();
     const btn = document.getElementById('untagged-toggle');
     btn.classList.toggle('active', videoManager.showUntaggedOnly);
     btn.textContent = videoManager.showUntaggedOnly ? 'Showing Untagged' : 'Show Untagged Only';
-    if (videoManager.showUntaggedOnly) showNotification('Filtering: Untagged videos only', 'info');
+    if (videoManager.showUntaggedOnly) showNotification('フィルター: 未タグ付き動画のみ表示', 'info');
     render();
 }
 
@@ -224,18 +260,14 @@ function updateFilterUI() {
 }
 
 function removeFilter(type, tag) {
-    videoManager.filters[type] = videoManager.filters[type].filter(t => t !== tag);
+    videoManager.removeFilter(type, tag);
     updateFilterUI();
 }
 
 function clearFilters() {
-    videoManager.filters = { and: [], or: [], not: [] };
+    videoManager.clearFilters();
     updateFilterUI();
 }
-/**
- * HAP & DXV Manager - Frontend Logic (Part 2/2)
- * Detail Panel, Tagging, Export, Events
- */
 
 // =========================================
 // 5. 詳細パネル & プレビュー
@@ -244,9 +276,9 @@ async function showDetail(video) {
     videoManager.activeVideo = video;
     const panel = document.getElementById('info-panel');
     const videoArea = document.getElementById('panel-video');
-    
-    await cleanupPreview();
-    
+
+    await videoManager.cleanupPreview();
+
     panel.classList.add('open');
     document.getElementById('panel-name').textContent = video.name;
     document.getElementById('panel-specs').innerHTML = `
@@ -255,13 +287,13 @@ async function showDetail(video) {
         <strong>FPS:</strong> ${video.fps}<br>
         <strong>Path:</strong> ${video.path}
     `;
-    
+
     videoArea.innerHTML = '<div style="color:var(--accent); padding:20px; text-align:center;">Loading...</div>';
 
     try {
         const codec = video.codec.toLowerCase();
-        const needsPreview = codec.includes('hap') || 
-                            codec.includes('dxv') || 
+        const needsPreview = codec.includes('hap') ||
+                            codec.includes('dxv') ||
                             video.path.toLowerCase().endsWith('.mov') ||
                             video.path.toLowerCase().endsWith('.mkv');
 
@@ -276,7 +308,7 @@ async function showDetail(video) {
         videoArea.innerHTML = `<video src="${videoSrc}" autoplay loop muted controls style="width:100%; height:100%; object-fit: contain;"></video>`;
     } catch (error) {
         videoArea.innerHTML = '<div style="color:#e74c3c; padding:20px; text-align:center;">Preview Error</div>';
-        showError('Preview generation failed: ' + error.message);
+        showError('プレビュー生成に失敗: ' + error.message);
     }
 
     renderTags(video);
@@ -286,12 +318,12 @@ async function showDetail(video) {
 function renderTags(video) {
     const tagArea = document.getElementById('panel-tags');
     tagArea.innerHTML = '';
-    
+
     if (video.tags) {
         video.tags.split(',').forEach(tag => {
             const trimmed = tag.trim();
             if (!trimmed) return;
-            
+
             const badge = document.createElement('span');
             badge.className = 'badge';
             badge.innerHTML = `${trimmed} <i onclick="removeTagFromVideo('${trimmed}')">&times;</i>`;
@@ -300,16 +332,9 @@ function renderTags(video) {
     }
 }
 
-async function cleanupPreview() {
-    if (videoManager.currentPreviewPath) {
-        await window.api.deletePreview(videoManager.currentPreviewPath);
-        videoManager.currentPreviewPath = null;
-    }
-}
-
 function togglePanel() {
     document.getElementById('info-panel').classList.remove('open');
-    cleanupPreview();
+    videoManager.cleanupPreview();
     videoManager.activeVideo = null;
     render();
 }
@@ -321,46 +346,44 @@ async function addNewTag(e) {
     if (e.key === 'Enter' && videoManager.activeVideo) {
         const newTag = e.target.value.trim();
         if (!newTag) return;
-        await addTagToVideo(videoManager.activeVideo, newTag);
-        e.target.value = '';
+
+        try {
+            const added = await videoManager.addTagToVideo(videoManager.activeVideo, newTag);
+            if (added) {
+                renderTags(videoManager.activeVideo);
+                updateSidebar();
+                showNotification(`✅ タグ "${newTag}" を追加しました`, 'success');
+            }
+            e.target.value = '';
+        } catch (error) {
+            showError('タグの追加に失敗: ' + error.message);
+        }
     }
 }
 
 async function addTagToVideo(video, tag) {
     try {
-        let tagArray = video.tags ? video.tags.split(',').map(t => t.trim()) : [];
-        if (tagArray.includes(tag)) {
-            showNotification(`⚠️ Tag "${tag}" already exists`, 'warning');
-            return;
+        const added = await videoManager.addTagToVideo(video, tag);
+        if (added) {
+            if (videoManager.activeVideo && videoManager.activeVideo.path === video.path) {
+                renderTags(video);
+            }
+            updateSidebar();
+            showNotification(`✅ タグ "${tag}" を追加しました`, 'success');
         }
-        tagArray.push(tag);
-        const newTagsStr = tagArray.join(',');
-        
-        await window.api.updateTags({ path: video.path, tags: newTagsStr });
-        video.tags = newTagsStr;
-        
-        if (videoManager.activeVideo && videoManager.activeVideo.path === video.path) {
-            renderTags(video);
-        }
-        updateSidebar();
-        showNotification(`✅ Tag "${tag}" added`, 'success');
     } catch (error) {
-        showError('Failed to add tag: ' + error.message);
+        showError('タグの追加に失敗: ' + error.message);
     }
 }
 
 async function removeTagFromVideo(tag) {
     if (!videoManager.activeVideo) return;
     try {
-        let tagArray = videoManager.activeVideo.tags.split(',').map(t => t.trim()).filter(t => t !== tag);
-        const newTagsStr = tagArray.join(',');
-        
-        await window.api.updateTags({ path: videoManager.activeVideo.path, tags: newTagsStr });
-        videoManager.activeVideo.tags = newTagsStr;
+        await videoManager.removeTagFromVideo(videoManager.activeVideo, tag);
         renderTags(videoManager.activeVideo);
-        showNotification('✅ Tag removed', 'success');
+        showNotification('✅ タグを削除しました', 'success');
     } catch (error) {
-        showError('Failed to remove tag: ' + error.message);
+        showError('タグの削除に失敗: ' + error.message);
     }
 }
 
@@ -370,42 +393,41 @@ async function removeTagFromVideo(tag) {
 async function exportFilteredFiles() {
     const filteredVideos = videoManager.getFilteredVideos();
     if (filteredVideos.length === 0) {
-        showNotification('No files to export', 'warning');
+        showNotification('エクスポートするファイルがありません', 'warning');
         return;
     }
-    
+
     const filePaths = filteredVideos.map(v => v.path);
     const destinationDir = await window.api.selectExportDirectory();
     if (!destinationDir) return;
-    
-    showNotification(`Exporting ${filePaths.length} files...`, 'info');
-    
+
+    showNotification(`${filePaths.length}件のファイルをエクスポート中...`, 'info');
+
     try {
         const result = await window.api.exportFiles({
             files: filePaths,
             destinationDir: destinationDir
         });
-        
+
         const totalSizeMB = (result.totalSize / (1024 * 1024)).toFixed(2);
         if (result.success > 0) {
             showNotification(
-                `✅ Exported ${result.success} files (${totalSizeMB} MB)` +
-                (result.failed > 0 ? ` | ❌ Failed: ${result.failed}` : ''),
+                `✅ ${result.success}件エクスポート完了 (${totalSizeMB} MB)` +
+                (result.failed > 0 ? ` | ❌ 失敗: ${result.failed}件` : ''),
                 result.failed > 0 ? 'warning' : 'success'
             );
         } else {
-            showNotification('❌ Export failed', 'error');
+            showNotification('❌ エクスポートに失敗しました', 'error');
         }
     } catch (error) {
-        console.error('Export error:', error);
-        showNotification('❌ Export failed: ' + error.message, 'error');
+        console.error('エクスポートエラー:', error);
+        showNotification('❌ エクスポート失敗: ' + error.message, 'error');
     }
 }
 
 // =========================================
-// 8. イベント & ユーティリティ
+// 8. イベント & ドラッグ&ドロップ
 // =========================================
-
 function setupDragDropHandlers() {
     // フィルターゾーン
     document.querySelectorAll('.zone').forEach(zone => {
@@ -416,8 +438,8 @@ function setupDragDropHandlers() {
             zone.classList.remove('over');
             const tag = e.dataTransfer.getData('text');
             const type = zone.id.replace('zone-', '');
-            if (tag && !videoManager.filters[type].includes(tag)) {
-                videoManager.filters[type].push(tag);
+            if (tag) {
+                videoManager.addFilter(type, tag);
                 updateFilterUI();
             }
         });
@@ -453,41 +475,35 @@ function setupDragDropHandlers() {
 }
 
 // =========================================
-// キーボードショートカット (修正版)
+// 9. キーボードショートカット
 // =========================================
 document.addEventListener('keydown', (e) => {
     // 入力フォーム使用中は無効化
     if (document.activeElement.tagName === 'INPUT') return;
-    
+
     // カードナビゲーション
     if (['ArrowRight', 'ArrowLeft'].includes(e.key)) {
-        e.preventDefault(); // スクロール防止
-        
+        e.preventDefault();
+
         const visibleCards = Array.from(document.querySelectorAll('.card'));
         if (visibleCards.length === 0) return;
-        
+
         const currentIndex = visibleCards.findIndex(c => c.classList.contains('active'));
         let nextIndex;
-        
+
         if (currentIndex === -1) {
-            // 何も選択されていない場合は先頭を選択
             nextIndex = 0;
+        } else if (e.key === 'ArrowRight') {
+            nextIndex = (currentIndex + 1) % visibleCards.length;
         } else {
-            if (e.key === 'ArrowRight') {
-                // 右: (現在 + 1) % 全数 でループ
-                nextIndex = (currentIndex + 1) % visibleCards.length;
-            } else {
-                // 左: (現在 - 1 + 全数) % 全数 でループ（負の数対策）
-                nextIndex = (currentIndex - 1 + visibleCards.length) % visibleCards.length;
-            }
+            nextIndex = (currentIndex - 1 + visibleCards.length) % visibleCards.length;
         }
-        
-        // カードをクリックして選択状態にし、視界にスクロール
+
         const targetCard = visibleCards[nextIndex];
         targetCard.click();
         targetCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
-    
+
     // エスケープキー
     if (e.key === 'Escape') {
         togglePanel();
@@ -495,18 +511,19 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-
-// プログレス表示
+// =========================================
+// 10. プログレス表示
+// =========================================
 window.api.onProgress(data => {
     const progressDiv = document.getElementById('progress');
     progressDiv.classList.remove('hidden');
-    
+
     const percentage = Math.round((data.current / data.total) * 100);
     document.getElementById('progress-fill').style.width = percentage + '%';
     document.getElementById('progress-percent').textContent = percentage + '%';
     document.getElementById('progress-status').textContent = `${data.current}/${data.total}`;
     document.getElementById('progress-file').textContent = data.file;
-    
+
     if (data.data) {
         const existingIndex = videoManager.videos.findIndex(v => v.path === data.data.path);
         if (existingIndex !== -1) {
@@ -516,16 +533,18 @@ window.api.onProgress(data => {
         }
         render();
     }
-    
+
     if (data.current === data.total) {
         setTimeout(() => {
             progressDiv.classList.add('hidden');
-            showNotification('✅ All videos processed', 'success');
+            showNotification('✅ すべての動画を処理しました', 'success');
         }, 2000);
     }
 });
 
-// 通知システム
+// =========================================
+// 11. 通知システム & ユーティリティ
+// =========================================
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('error-notification');
     const messageEl = document.getElementById('error-message');
@@ -538,6 +557,7 @@ function showNotification(message, type = 'info') {
         setTimeout(() => notification.classList.add('hidden'), 3000);
     }
 }
+
 function showError(message) { showNotification(message, 'error'); }
 function hideError() { document.getElementById('error-notification').classList.add('hidden'); }
 function showShortcuts() { document.getElementById('shortcuts-modal').classList.remove('hidden'); }
